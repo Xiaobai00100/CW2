@@ -1,0 +1,254 @@
+---
+title: "6-visualisation"
+output: pdf_document
+date: "2024-05-07"
+---
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+library(scales)  # For more coloring options and percentage formatting
+library(reshape2)  # for melting data
+```
+
+```{r}
+# Function to create a customized bar plot
+plot_average_by_cluster <- function(data, cluster_col, numeric_col, plot_title = "Average Value by Cluster", x_label = "Cluster", y_label = "Average Value") {
+  # Convert cluster and numeric columns to symbols for aes_string usage
+  cluster_col <- sym(cluster_col)
+  numeric_col <- sym(numeric_col)
+
+  # Prepare the plot
+  p <- ggplot(data, aes_string(x = rlang::expr_text(cluster_col), y = rlang::expr_text(numeric_col), fill = rlang::expr_text(numeric_col))) +
+    geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+    geom_text(aes(label = sprintf("%.2f", !!numeric_col)),
+              position = position_dodge(width = 0.7), vjust = -0.5, color = "black", size = 3.5) +
+    scale_fill_gradient2(low = "blue", mid = "gray", high = "red", midpoint = 0,
+                         limits = c(min(data[[rlang::expr_text(numeric_col)]], na.rm = TRUE), 
+                                    max(data[[rlang::expr_text(numeric_col)]], na.rm = TRUE)),
+                         guide = "none") +  # No legend for a cleaner look
+    labs(title = plot_title,
+         x = x_label,
+         y = y_label) +
+    theme_minimal() +
+    theme(text = element_text(size = 12),
+          axis.title = element_text(size = 14),
+          plot.title = element_text(size = 16, hjust = 0.5),
+          legend.position = "none")
+  
+  return(p)
+}
+
+```
+
+```{r}
+# Example usage
+plot_average_by_cluster(recluster_profile, "recluster", "coins_inn_tier1_num_mean", 
+                        "Average Coinsurance In-Network Tier 1 by Cluster", "Cluster", "Average Coinsurance")
+
+```
+
+
+
+
+```{r}
+# Function to create a boxplot for any numeric variable with customizable titles and axis labels
+plot_boxplot_cluster <- function(data, cluster_col, numeric_col, plot_title = "Distribution by Cluster", x_label = "Cluster", y_label = "Value") {
+  # Generate color palette
+  num_clusters <- length(unique(data[[cluster_col]]))
+  palette <- brewer.pal(min(12, num_clusters), "Set3")  # Get palette colors
+  if (num_clusters > 12) {
+    # Repeat colors if more than 12 clusters
+    palette <- rep(palette, length.out = num_clusters)
+  }
+
+  # Plot
+  ggplot(data, aes(x = factor(!!sym(cluster_col)), y = !!sym(numeric_col), fill = factor(!!sym(cluster_col)))) +
+    geom_boxplot(outlier.color = "red", outlier.shape = 1, alpha = 0.6) +  # Display outliers in red
+    scale_fill_manual(values = palette) +  # Apply manually specified colors
+    labs(
+      title = plot_title,
+      x = x_label,
+      y = y_label
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",  # Position the legend at the bottom
+      legend.title = element_blank(),  # Remove the legend title
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # Bold and center the title
+      axis.title.x = element_text(size = 14),  # Enhance x-axis title size
+      axis.title.y = element_text(size = 14),  # Enhance y-axis title size
+      axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5, color = "black", size = 12),  # Improve x-axis text
+      axis.text.y = element_text(color = "black", size = 12),  # Improve y-axis text
+      legend.text = element_text(size = 10)  # Adjust the legend text size
+    )
+}
+```
+
+```{r}
+# Example usage with customized titles
+plot_boxplot_cluster(
+  benefits_norm, 
+  "cluster", 
+  "coins_inn_tier1_num", 
+  plot_title = "Distribution of Coinsurance In-Network Tier 1 by Cluster", 
+  x_label = "Cluster", 
+  y_label = "Coinsurance In-Network Tier 1 (%)"
+)
+
+```
+
+
+
+```{r}
+# Function to create a polar bar chart (pie chart) for any categorical variable with customizable titles
+plot_pie_chart <- function(data, cluster_col, category_col, plot_title = "Distribution by Cluster", legend_title = "Category") {
+  # Summarize data
+  data_summarized <- data %>%
+    group_by(!!sym(cluster_col), !!sym(category_col)) %>%
+    summarise(count = n(), .groups = 'drop')
+  
+  # Generate color palette
+  num_categories <- length(unique(data[[category_col]]))
+  colors <- brewer.pal(min(8, num_categories), "Dark2")  # Adjust based on number of categories
+  
+  # Plot
+  ggplot(data_summarized, aes(x = "", y = count, fill = factor(!!sym(category_col)))) +
+    geom_bar(width = 1, stat = "identity") +
+    coord_polar(theta = "y") +
+    facet_wrap(as.formula(paste0("~", cluster_col)), scales = "free") +
+    scale_fill_manual(values = colors) +
+    labs(
+      title = plot_title,
+      fill = legend_title
+    ) +
+    theme_minimal() +
+    theme(
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks = element_blank(),
+      panel.spacing = unit(2, "lines"),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      legend.title = element_text(face = "bold", size = 12),
+      legend.text = element_text(size = 10)
+    )
+}
+```
+
+```{r}
+# Example usage with customized titles
+plot_pie_chart(
+  benefits_norm, 
+  "cluster", 
+  "is_subj_to_ded_tier1_num", 
+  plot_title = "Distribution of Deductible Subject by Cluster", 
+  legend_title = "Deductible Status"
+)
+
+
+```
+
+
+
+```{r}
+# Function to create a proportion bar plot for any categorical variable across clusters
+plot_proportion_by_cluster <- function(data, cluster_col, category_col, plot_title = "Proportion of Category by Cluster", x_label = "Cluster", y_label = "Proportion") {
+  # Convert the column names to symbols for use in tidy evaluation within dplyr verbs
+  cluster_sym <- rlang::sym(cluster_col)
+  category_sym <- rlang::sym(category_col)
+  
+  # Ensure the input columns are factors for correct plotting
+  data <- data %>%
+    mutate(!!cluster_sym := factor(!!cluster_sym),
+           !!category_sym := factor(!!category_sym))
+
+  # Calculate proportions
+  data_summarised <- data %>%
+    group_by(!!cluster_sym, !!category_sym) %>%
+    summarise(count = n(), .groups = "drop") %>%
+    mutate(total = sum(count),
+           proportion = count / total)
+
+  # Create the plot
+  p <- ggplot(data_summarised, aes(x = !!cluster_sym, y = proportion, fill = !!category_sym)) +
+    geom_bar(stat = "identity", position = "fill") +
+    scale_y_continuous(labels = percent_format()) +
+    labs(title = plot_title, x = x_label, y = y_label) +
+    scale_fill_brewer(palette = "Paired", guide = guide_legend(title = "Category")) +  # Use a paired color palette
+    theme_minimal() +
+    theme(
+      legend.position = "bottom",  # Move legend to bottom
+      legend.title = element_blank(),  # Optionally remove legend title
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # Bold and center the title
+      axis.title.x = element_text(size = 14),  # Enhance x-axis title size
+      axis.title.y = element_text(size = 14),  # Enhance y-axis title size
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  # Improve x-axis text readability
+      legend.text = element_text(size = 10)  # Adjust legend text size
+    )
+
+  return(p)
+}
+```
+
+```{r}
+# Example usage
+# Ensure that the column names are passed as strings
+plot_proportion_by_cluster(benefits_norm, "cluster", "is_subj_to_ded_tier1_num", 
+                           "Proportion of Deductible Subject Status by Cluster", "Cluster", "Proportion")
+
+
+```
+
+
+
+```{r}
+# Function to create a heatmap of mean values for numeric variables by cluster
+plot_heatmap_means <- function(data, cluster_col, plot_title = "Heatmap of Mean Values by Cluster") {
+  # Compute the means for the heatmap
+  heatmap_data <- data %>%
+    group_by(!!sym(cluster_col)) %>%
+    summarise(across(where(is.numeric), mean, na.rm = TRUE)) %>%
+    ungroup()
+
+  # Melt data for heatmap
+  heatmap_data_melt <- reshape2::melt(heatmap_data, id.vars = cluster_col)
+
+  # Plot
+  p <- ggplot(heatmap_data_melt, aes(x = variable, y = factor(!!sym(cluster_col), levels = unique(heatmap_data[[cluster_col]])), fill = value)) +
+    geom_tile(color = "white") +
+    scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = median(heatmap_data_melt$value, na.rm = TRUE)) +
+    theme_minimal() +
+    labs(
+      title = plot_title,
+      x = "Metric",
+      y = "Cluster"
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels for better readability
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # Bold and center the title
+      axis.title.x = element_text(size = 14),  # Enhance x-axis title size
+      axis.title.y = element_text(size = 14),  # Enhance y-axis title size
+      axis.text = element_text(size = 12)  # Enhance text size
+    )
+
+  return(p)
+}
+```
+
+```{r}
+# Example usage
+plot_heatmap_means(benefits_norm, "cluster", "Heatmap of Mean Values by Cluster")
+
+```
+
+
+
+
+
+
+
+
+
+

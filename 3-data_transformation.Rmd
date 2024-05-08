@@ -1,0 +1,226 @@
+---
+title: "3-data_transformation"
+output: html_document
+date: "2024-04-25"
+---
+3-data_transformation
+
+Purpose: Transform the data, make them compatible with the cluster models later.
+
+```{r}
+setwd("/Users/xb/Desktop/Imperial College/Data Science/Coursework/CW2/01714481-math70076-assessment-2")
+# Load the data
+benefits_cost_sharing_cleaned <- readRDS("benefits_cost_sharing_cleaned.rds")
+```
+
+
+```{r}
+head(benefits_cost_sharing_cleaned)
+```
+
+To build cluster model. We need first to transform all the variables used in numerical. Then we will normalize each variable to ensure that all features contribute equally to the distance calculations in cluster model.
+
+```{r}
+benefits <- unique(benefits_cost_sharing_cleaned$benefit_name)
+# Assume 'benefits' is your vector of all benefit names
+benefits_cleaned <- tolower(benefits) %>%
+  str_replace_all("[^[:alnum:] ]", "") %>%
+  str_squish()
+
+# Define keywords and their groups
+keywords <- c("dental", "orthodontia", "periodontal", "endodontic", "root canal", "denture", "implant", "extractions", "fillings",
+              "mental", "behavioral", "substance abuse", "telehealth", "psychiatric", "counseling",
+              "drugs", "prescription", "generic", "brand", "medication", "pharmacy",
+              "vision", "eye", "eyeglass", "lenses", "optical",
+              "hospital", "surgery", "inpatient", "outpatient", "rehabilitation", "facility", "emergency",
+              "maternity", "prenatal", "infertility", "contraceptive", "abortion",
+              "preventive", "screening", "vaccination", "wellness", "physical", "nutrition",
+              "diabetes", "hiv", "aids", "cancer", "asthma", "allergy", "cardiac", "pulmonary",
+              "therapy", "rehabilitation", "physical", "occupational", "speech", "cognitive", "aural",
+              "orthotics", "prosthetic", "anesthesia", "transplant", "dialysis", "radiology", "imaging")
+
+# Function to assign a group based on keywords
+group_by_keyword <- function(benefit_name, keywords) {
+  for (keyword in keywords) {
+    if (str_detect(benefit_name, keyword)) {
+      return(keyword)
+    }
+  }
+  return("other")  # For names that do not match any keyword
+}
+
+# Apply grouping
+benefits_grouped <- data.frame(benefit = benefits_cleaned)
+benefits_grouped$group <- sapply(benefits_grouped$benefit, group_by_keyword, keywords = keywords)
+
+# View grouped data and get a summary
+print(benefits_grouped)
+summary_table <- benefits_grouped %>%
+  group_by(group) %>%
+  summarise(count = n(), benefits = toString(benefit))
+  
+print(summary_table)
+```
+
+
+```{r}
+# Assuming 'benefits' is your vector of all benefit names
+benefits_cleaned <- tolower(benefits) %>%
+  str_replace_all("[^[:alnum:] ]", "") %>%
+  str_squish()
+
+# Define keywords and their groups
+keywords <- c("primary", "specialist", "office visit", "nurs", "physician", "clinic", "evisit", "doctor helpline", "call", "opinion", "charge","tele",
+              "hospice", "longterm", "custodial", "respite", "acute care",
+              "urgent", "emergency", "immediate", "ambulance",
+              "dental", "dontia", "dontal", "endodontic", "root", "denture", "implant", "extractions", "fillings", "tooth", "teeth", "oral", "maxillofacial", "pulpotomy", "pulp", "sealants", "bridges", "crown", "fluoride", "gum", "bridge", "maintainer", "mouth", "post and core", "apexification", "lusal", "alveo", "gingi", "apicoectomy", "cavities", "metal", "routine cleaning", "posterior composites", "flouride", "pin retention", "tissue", "conditioning", "fix",
+              "mental", "behavior", "substance abuse", "telehealth", "counseling", "psych", "neuropsych", "disorder", "adhd", "attention deficit", "psychological", "autism",
+              "drug", "prescription", "generic", "brand", "medication", "pharmacy", "pharmacotherapy", "nonpreferred", "non-preferred","medicin", "hormones",
+              "vision", "eye", "eyeglass", "lenses", "optical", "glasses", "optometry", "ophthalmology", "refractive",
+              "hospital", "surgery", "inpatient", "outpatient", "rehabilitation", "facility", "emergency", "clinic", "surgical", "operational", "transplant", "radiation", "anesthesia", "surgical", "non-surgical", "treatment", "procedure", "correction", "implant", "filling", "extractions", "masectomy",
+              "maternity", "prenatal", "infertility", "contraceptive", "abortion", "sterilization", "birth", "delivery", "reproductive", "family planning", "vasectomy", "tubal ligation", "fertility", "newborn", "baby", "pediatrics",
+              "preventive", "screening", "vaccination", "well", "physical", "nutrition", "preventative", "health", "fit", "exercise", "well-being", "check-up", "screen", "check-up", "health education", "gym", "prophylaxis", "restorative", "food", "tobacco", "pcp", "routine", "oscopy",
+              "diabetes", "hiv", "aids", "cancer", "asthma", "allergy", "cardiac", "pulmonary", "chronic", "disease", "renal", "dialysis", "heart", "blood", "acute", "diabetes", "ms", "multiple sclerosis", "hiv", "anemia", "mastectomy", "sleep", "bone", "brain", "breast", "respiratory",
+              "therapy", "rehabilitation", "physical", "occupational", "speech", "cognitive", "aural", "biofeedback", "massage", "therapeutic", "habilitation", "chiropractic", "naprapathy", "rehab", "orthodontics", "orthopedic", "naprapathic", "acupuncture", "manipula",
+              "orthotics", "prosthetic", "anesthesia", "transplant", "radiology", "imaging", "supplies", "formula", "nutrition", "feeding", "support", "ostomy", "home health", "orthopedic", "genetic", "testing", "diagnostic", "step", "equipment", "xray", "otologic",
+              "miscellaneous", "specific", "telemedicine", "lab", "diagnostic", "genetic", "testing", "hearing", "speech", "orthotic", "prosthetic", "dietician", "reconstruct", "Pediatric", "naturopathy")
+
+
+# Function to assign a group based on keywords
+group_by_keyword <- function(benefit_name, keywords) {
+  for (keyword in keywords) {
+    if (str_detect(benefit_name, keyword)) {
+      return(keyword)
+    }
+  }
+  return("other")  # For names that do not match any keyword
+}
+
+# Apply grouping
+benefits_grouped <- data.frame(benefit = benefits_cleaned)
+benefits_grouped$group <- sapply(benefits_grouped$benefit, group_by_keyword, keywords = keywords)
+
+
+print(benefits_grouped)
+summary_table <- benefits_grouped %>%
+  group_by(group) %>%
+  summarise(count = n(), benefits = toString(benefit))
+  
+print(summary_table)
+
+
+# Filter and display ungrouped benefits
+ungrouped_benefits <- benefits_grouped %>%
+  filter(group == "other") %>%
+  select(benefit)
+
+
+# Print ungrouped benefits
+print(ungrouped_benefits)
+
+```
+
+
+```{r}
+library(dplyr)
+library(stringr)
+
+
+
+# Clean the data
+benefits_cleaned <- tolower(benefits) %>%
+  str_replace_all("[^[:alnum:] ]", "") %>%
+  str_squish()
+
+# Define keywords
+keywords <- c('primary care', 'specialist', 'physician', 'nurse', 'practitioner', 'office visit', 
+              'hospice', 'nursing home', 'long-term care', 'custodial', 'private-duty nursing', 
+              'urgent care', 'emergency', 'acute care', 
+              'rehabilitation', 'therapy', 'physical', 'occupational', 'speech', 'cognitive', 'aural', 'massage', 'chiropractic', 
+              'surgical', 'non-surgical', 'anesthesia', 'transplant', 'radiation', 'treatment', 'procedure', 'implant', 
+              'preventive', 'screening', 'wellness', 'vaccination', 'health screening', 'nutrition', 'weight loss', 'fitness', 
+              'chronic', 'acute', 'diabetes', 'cancer', 'hiv', 'aids', 'heart', 'cardiac', 'pulmonary', 'allergy', 'asthma', 
+              'dental', 'orthodontia', 'periodontal', 'endodontic', 'teeth', 'oral', 'pulpotomy', 'filling', 'crown', 'denture', 'bridge', 
+              'maternity', 'prenatal', 'postnatal', 'abortion', 'contraceptive', 'family planning', 'infertility', 'sterilization', 
+              'mental health', 'behavioral health', 'substance abuse', 'counseling', 'psychiatric', 'therapy', 
+              'telemedicine', 'naturopathy', 'acupuncture', 'home health care', 'medical equipment', 'prosthetic', 'orthotic', 'genetic testing', 'laboratory services', 'diagnostic imaging')
+
+# Function to assign groups based on keywords
+group_by_keyword <- function(benefit_name, keywords) {
+  for (keyword in keywords) {
+    if (str_detect(benefit_name, keyword)) {
+      return(keyword)
+    }
+  }
+  return("other")  # For names that do not match any keyword
+}
+
+# Apply grouping
+benefits_grouped <- data.frame(benefit = benefits_cleaned)
+benefits_grouped$group <- sapply(benefits_grouped$benefit, group_by_keyword, keywords = keywords)
+
+# Find ungrouped benefits
+ungrouped_benefits <- benefits_grouped %>%
+  filter(group == "other") %>%
+  select(benefit)
+
+# Display results
+print(ungrouped_benefits)
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+

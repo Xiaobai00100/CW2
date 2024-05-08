@@ -1,0 +1,232 @@
+---
+title: "2-data_cleaning"
+output: pdf_document
+date: "2024-04-24"
+---
+
+2-data_cleaning.R
+Purpose: Clean the essential columns in the BenefitsCostSharing dataset to ensure there are no NAs before data segmentation.
+Key columns: benefit_name, coins_inn_tier1, coins_inn_tier2, coins_outof_net, copay_inn_tier1, copay_inn_tier2, copay_outof_net, is_covered, plan_id
+
+We have defined key columns above. The key columns are the ones that should not have NA included before analysis. We would either remove the rows where key columns have NA(s), or fill the NA with meaningful values.
+```{r}
+# Load the data
+benefits_cost_sharing <- readRDS("benefits_cost_sharing.rds")
+```
+
+```{r}
+# Display initial summary to understand the state of the data
+print("Initial Data Summary:")
+summary(benefits_cost_sharing)
+```
+
+```{r}
+# Detailed check for NA values across all columns
+print("NA Count in Each Column:")
+na_count <- sapply(benefits_cost_sharing, function(x) sum(is.na(x)))
+print(na_count)
+```
+We want to check the unique values of each columns.
+```{r}
+# Print unique value counts for key columns to understand diversity in data
+print("Unique Value Count for All Columns:")
+unique_counts <- sapply(benefits_cost_sharing, function(x) length(unique(x)))
+print(unique_counts)
+```
+
+Before we deal with the NA values, we also make sure all the unique values in key columns are meaningful. Therefore, we want to investigate further on the unique values of key columns.
+
+```{r} 
+# Example - coins_inn_tier1
+# For simple presentation, we skip printing outputs of other columns, but effective check on meaningful unique values have been carried out
+print("Unique values of coins_inn_tier1:")
+unique(benefits_cost_sharing$coins_inn_tier1)
+```
+
+
+```{r}
+# Filter rows where coins_copay columns is "Not Applicable"
+rows_with_not_applicable <- benefits_cost_sharing %>%
+  filter(copay_inn_tier1 == "Not Applicable" & copay_inn_tier2 == "Not Applicable" & coins_inn_tier1 == "Not Applicable" & coins_inn_tier2 == "Not Applicable" & coins_outof_net == "Not Applicable" & copay_outof_net == "Not Applicable")
+
+# Print the rows to get an overview of the data where coins_inn_tier1 is "Not Applicable"
+print("Rows where coins_inn_tier1 is 'Not Applicable':")
+print(rows_with_not_applicable)
+
+# Optionally, if the dataset is large and you want to see just the first few entries
+print("First few rows where coins_inn_tier1 is 'Not Applicable':")
+head(rows_with_not_applicable)
+```
+
+```{r}
+# Filter rows where coins_inn_tier1 is "Not Applicable"
+rows_with_not_applicable <- benefits_cost_sharing %>%
+  filter(coins_inn_tier1 == "Not Applicable")
+
+# Print the rows to get an overview of the data where coins_inn_tier1 is "Not Applicable"
+print("Rows where coins_inn_tier1 is 'Not Applicable':")
+print(rows_with_not_applicable)
+
+# Optionally, if the dataset is large and you want to see just the first few entries
+print("First few rows where coins_inn_tier1 is 'Not Applicable':")
+head(rows_with_not_applicable)
+```
+
+We observed that in coins and copay columns, there are 6 rows that have 6 "Not applicable" values across all copay and coins columns, where typical cost-sharing details do not apply in a standard way for these entries. Therefore we will remove these rows. The reason of other "Not applicable" shows in some of the copay and coins columns is some plan only have copayments applicable, whereas the coinsurance is not applicable. Therefore we can include them for analysis.
+
+We are then interested into the relationship of NA values across key columns. Are there overlaps among key columns including NA?
+In na_analysis1, we print out the number of rows that have all NAs across 7 columns (copay_inn_tier1, copay_inn_tier2, coins_inn_tier1, coins_inn_tier2, coins_outof_net, copay_outof_net, is_covered). We want to then compare this value to the number of NA in is_covered, to understand the context of NAs in these key columns.
+
+From the results we found that most of NAs (215968) in is_covered are shown together with all other 6 key coins and copay columns, whereas only 12 NAs in is_covered are excluded.
+```{r}
+# Create a new dataframe to analyze the pattern of NAs across specified 7 columns
+na_analysis1 <- benefits_cost_sharing %>%
+  select(copay_inn_tier1, copay_inn_tier2, coins_inn_tier1, coins_inn_tier2, coins_outof_net, copay_outof_net, is_covered) %>%
+  mutate_each(funs(is.na(.))) %>%
+  mutate(all_na = rowSums(.) == 7, # Check if all specified columns are NA in a row
+         any_na = rowSums(.) > 0)  # Check if any of the specified columns are NA in a row
+
+# Calculate how many rows have all NAs across these columns
+all_na_count <- sum(na_analysis1$all_na)
+print(paste("Number of rows with all NAs across specified columns:", all_na_count))
+
+# Calculate how many rows have any NAs across these columns
+any_na_count <- sum(na_analysis1$any_na)
+print(paste("Number of rows with any NAs across specified columns:", any_na_count))
+
+# Inspecting the first few rows where all columns are NA to see the pattern
+head(benefits_cost_sharing[na_analysis1$all_na, ])
+```
+
+We then want to display the details of these 12 columns with specified cost-sharing details. We will remove these rows, as they may affect the analysis relevant to benefit coverage of plans.
+```{r}
+# Rows with NA in 'is_covered' but specified cost-sharing details
+na_covered_specified_costs <- benefits_cost_sharing %>%
+  filter(is.na(is_covered) & 
+         !is.na(copay_inn_tier1) & 
+         !is.na(coins_inn_tier1) & 
+         !is.na(coins_outof_net) & 
+         !is.na(copay_outof_net))
+
+# View the resulting rows to analyze the data
+print(na_covered_specified_costs)
+```
+
+
+```{r}
+# Create a new dataframe to analyze the pattern of NAs across specified 6 columns
+na_analysis2 <- benefits_cost_sharing %>%
+  select(copay_inn_tier1, copay_inn_tier2, coins_inn_tier1, coins_inn_tier2, coins_outof_net, copay_outof_net) %>%
+  mutate_each(funs(is.na(.))) %>%
+  mutate(all_na = rowSums(.) == 6, # Check if all specified columns are NA in a row
+         any_na = rowSums(.) > 0)  # Check if any of the specified columns are NA in a row
+
+# Calculate how many rows have all NAs across these columns
+all_na_count <- sum(na_analysis2$all_na)
+print(paste("Number of rows with all NAs across specified columns:", all_na_count))
+
+# Calculate how many rows have any NAs across these columns
+any_na_count <- sum(na_analysis2$any_na)
+print(paste("Number of rows with any NAs across specified columns:", any_na_count))
+
+# Inspecting the first few rows where all columns are NA to see the pattern
+head(benefits_cost_sharing[na_analysis2$all_na, ])
+```
+
+After all the inspections and investgation to raw data, lets start deal with the NAs.
+
+1. Remove rows where 'plan_id' is missing
+Explanation: 'plan_id' is crucial for identifying specific insurance plans. Missing IDs mean we cannot accurately associate data with a plan.
+Handling Strategy: Remove these rows as they cannot be replaced or imputed without compromising data integrity.
+```{r}
+benefits_cost_sharing <- benefits_cost_sharing %>% 
+  filter(!is.na(plan_id))
+```
+
+2. Remove rows where 'benefit_name' is missing
+Explanation: 'benefit_name' is necessary for identifying the type of service covered. Missing names prevent accurate service identification.
+Handling Strategy: Remove these rows because the type of service is essential for our analysis and cannot be inferred or replaced.
+```{r}
+benefits_cost_sharing <- benefits_cost_sharing %>% 
+  filter(!is.na(benefit_name))
+```
+
+1. Remove rows where 'is_covered' is missing
+Explanation: 'is_covered' indicates whether a service is covered under the plan, impacting cost-sharing analysis.
+Handling Strategy: Remove rows with missing 'is_covered' unless default assumptions about coverage are justifiably safe and supported by additional data.
+
+```{r}
+# Inspecting rows where 'copay_inn_tier1' and 'coins_inn_tier1' are NA
+na_is_covered_data <- benefits_cost_sharing %>%
+  filter(is.na(is_covered))
+
+# Viewing a sample of the data to understand the context
+print("Sample rows with NA in copay_inn_tier1 or coins_inn_tier1:")
+print(head(na_is_covered_data))
+```
+
+```{r}
+benefits_cost_sharing <- benefits_cost_sharing %>% 
+  filter(!is.na(is_covered))
+
+```
+
+We Inspecting rows where 'copay_inn_tier1' and 'coins_inn_tier1' are NA
+```{r}
+# Inspecting rows where 'copay_inn_tier1' and 'coins_inn_tier1' are NA
+na_copay_coins_data <- benefits_cost_sharing %>%
+  filter(is.na(copay_inn_tier1) | is.na(coins_inn_tier1) | is.na(coins_outof_net) | is.na( copay_outof_net))
+
+# Viewing a sample of the data to understand the context
+print("Sample rows with NA in copay_inn_tier1 or coins_inn_tier1:")
+print(head(na_copay_coins_data))
+
+# Getting a more detailed summary of these rows
+print("Detailed Summary of Rows with NA in Cost-Related Columns:")
+summary(na_copay_coins_data)
+
+# It might also be useful to see how prevalent these NAs are within the context of the entire dataset
+na_counts_cost_columns <- sapply(benefits_cost_sharing[c("copay_inn_tier1", "coins_inn_tier1", "coins_outof_net", "copay_outof_net")], function(x) sum(is.na(x)))
+print("Count of NA in Cost-Related Columns:")
+print(na_counts_cost_columns)
+```
+
+```{r}
+# Create a new dataframe to analyze the pattern of NAs across specified columns
+na_analysis <- benefits_cost_sharing %>%
+  select(copay_inn_tier1, coins_inn_tier1, coins_outof_net, copay_outof_net) %>%
+  mutate_each(funs(is.na(.))) %>%
+  mutate(all_na = rowSums(.) == 4, # Check if all specified columns are NA in a row
+         any_na = rowSums(.) > 0)  # Check if any of the specified columns are NA in a row
+
+# Calculate how many rows have all NAs across these columns
+all_na_count <- sum(na_analysis$all_na)
+print(paste("Number of rows with all NAs across specified columns:", all_na_count))
+
+# Calculate how many rows have any NAs across these columns
+any_na_count <- sum(na_analysis$any_na)
+print(paste("Number of rows with any NAs across specified columns:", any_na_count))
+
+# Inspecting the first few rows where all columns are NA to see the pattern
+head(benefits_cost_sharing[na_analysis$any_na, ])
+```
+
+```{r}
+# 4. Handle missing values in 'copay_inn_tier1' and 'coins_inn_tier1' conservatively
+# Explanation: These fields indicate specific in-network cost-sharing amounts. Missing values may suggest no additional cost-sharing under certain conditions.
+# Handling Strategy: Investigate plan documents or additional context. If unclear, consider conservatively setting NA to indicate 'No Additional Cost' or remove unclear cases.
+benefits_cost_sharing <- benefits_cost_sharing %>% 
+  mutate(copay_inn_tier1 = if_else(is.na(copay_inn_tier1), "No Additional Cost", copay_inn_tier1),
+         coins_inn_tier1 = if_else(is.na(coins_inn_tier1), 0, coins_inn_tier1)) # Assuming 0% coinsurance if not specified
+
+# Check the state of the data after cleaning
+print("Post-Cleaning Data Summary:")
+summary(benefits_cost_sharing)
+
+# Save the cleaned data for further analysis
+saveRDS(benefits_cost_sharing, file = "benefits_cost_sharing_cleaned.rds")
+
+# Confirm the final structure of the cleaned data
+glimpse(benefits_cost_sharing)
+
+```

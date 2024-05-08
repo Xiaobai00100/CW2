@@ -1,0 +1,297 @@
+---
+title: "5-cluster_analysis_state"
+output: html_document
+date: "2024-05-06"
+---
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(purrr) 
+library(cluster)  # for silhouette analysis
+library(Rtsne)    # for t-SNE dimensionality reduction
+library(randomForest)  # for feature importance
+library(corrplot)  # for correlation plots
+library(modeest)
+```
+
+```{r}
+# Set the working directory, remember to set your own working directory when running the project
+setwd("/Users/xb/Desktop/Imperial College/Data Science/Coursework/CW2/01714481-math70076-assessment-2")
+# Load the data
+# benefits_cost_sharing_transformed <- readRDS("benefits_cost_sharing_transformed.rds")
+benefits_norm_state <- readRDS("benefits_norm.rds")
+```
+
+```{r}
+specific_division_data <- benefits_norm_state %>%
+  filter(division == unique(benefits_norm$division)[1,])
+
+unique_specific_division_data <- specific_division_data %>%
+  distinct() %>%  # Remove duplicate rows
+  # select(-division, -cluster)
+```
+
+```{r}
+# Exclude "benefit_name" column
+benefits_features_state <- select(unique_specific_division_data, -benefit_name)
+
+# Set "grouped_benefit_numeric" as the target variable
+target_variable_state <- sampled_data$grouped_benefit_numeric
+
+# Function to calculate total within-cluster sum of squares
+wss <- function(k) {
+  kmeans(benefits_features_state, k, nstart = 10)$tot.withinss
+}
+
+# Calculate within-cluster sum of squares for k = 1 to 10
+k.values <- 1:40
+wss_values <- map_dbl(k.values, wss)
+
+# Plot the elbow plot
+elbow_plot <- ggplot(data.frame(k = k.values, wss = wss_values), aes(x = k, y = wss)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Number of clusters (k)", y = "Total within-cluster sum of squares") +
+  ggtitle("Elbow Method") +
+  theme_minimal()
+
+print(elbow_plot)
+
+```
+
+```{r}
+# Number of clusters (you can change this according to the elbow method or your requirements)
+k <- 12
+
+# Perform k-means clustering
+kmeans_result_state <- kmeans(benefits_features_state, 
+                        centers = k,              # Number of clusters
+                        nstart = 10,             # Number of random starts
+                        iter.max = 100,          # Maximum number of iterations
+                        algorithm = "Hartigan-Wong" # Algorithm for center initialization
+)
+
+# Add cluster labels to the sampled data
+unique_specific_division_data$cluster <- as.factor(kmeans_result_state$cluster)
+
+# Print the counts of data points in each cluster
+print(table(unique_specific_division_data$cluster))
+
+# Plot clusters based on the first two principal components (assuming features are high-dimensional)
+# If you have fewer features, you can plot based on those features
+pca <- prcomp(benefits_features_state, scale. = TRUE)
+pca_data <- as.data.frame(predict(pca, benefits_features_state))
+
+# Plot clusters
+cluster_plot <- ggplot(pca_data, aes(x = PC1, y = PC2, color = unique_specific_division_data$cluster)) +
+  geom_point() +
+  labs(x = "Principal Component 1", y = "Principal Component 2", color = "Cluster") +
+  ggtitle("K-means Clustering") +
+  theme_minimal()
+
+print(cluster_plot)
+
+```
+
+```{r}
+# Step 1: Cluster Validation
+# Silhouette analysis
+# Sampling equally from each cluster
+sampled_indices_state <- lapply(unique(kmeans_result_state$cluster), function(cl) {
+  sample(which(kmeans_result_state$cluster == cl))  # sample 100 points from each cluster
+})
+
+sampled_indices_state <- unlist(sampled_indices_state)
+sampled_sil_scores_state <- silhouette(kmeans_result_state$cluster[sampled_indices_state], dist(benefits_features_state[sampled_indices_state, ]))
+
+# Convert silhouette output to a dataframe
+sil_data_state <- silhouette(kmeans_result_state$cluster[sampled_indices_state], dist(benefits_features_state[sampled_indices_state, ]))
+sil_df_state <- data.frame(cluster = factor(sil_data_state[, 'cluster']),
+                     silhouette_width = sil_data_state[, 'sil_width'])
+
+# Calculate average silhouette score per cluster
+sil_aver_state <- sil_df_state %>%
+  group_by(cluster) %>%
+  summarise(
+    average_silhouette = mean(silhouette_width)
+  ) %>%
+  arrange(desc(average_silhouette))  # Sorting by average silhouette to identify best and worst performing clusters
+
+overall_avg_silhouette_state <- mean(sil_df_state$silhouette_width)
+
+# Print the summary
+print(sil_aver_state)
+print(paste("Overall Average Silhouette Score: ", overall_avg_silhouette_state))
+
+# Plot using ggplot2
+library(ggplot2)
+ggplot(sil_df_state, aes(x = silhouette_width, fill = cluster)) +
+  geom_histogram(binwidth = 0.05, color = "black", alpha = 0.7) +
+  facet_wrap(~ cluster, scales = "free_x") +
+  theme_minimal() +
+  labs(title = "Silhouette Width Distribution by Cluster",
+       x = "Silhouette Width",
+       y = "Frequency") +
+  theme(legend.position = "none")
+
+
+```
+
+```{r}
+# Step 2: Re-clustering
+
+# 2: Apply t-SNE
+tsne_results_state <- Rtsne(benefits_features_state, dims = 2, perplexity = 90, check_duplicates = FALSE, verbose = TRUE, max_iter = 500)
+
+# Convert to dataframe for plotting and clustering
+tsne_data_state <- data.frame(X = tsne_results_state$Y[,1], Y = tsne_results_state$Y[,2])
+
+# 3: Re-cluster using k-means on the t-SNE output
+tsne_kmeans_state <- kmeans(tsne_data_state, centers = 15, nstart = 20)
+
+# Add cluster labels to t-SNE data
+tsne_data_state$cluster <- as.factor(tsne_kmeans_state$cluster)
+
+# 4: Plotting
+ggplot(tsne_data_state, aes(x = X, y = Y, color = cluster)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Cluster Visualization after t-SNE", x = "t-SNE 1", y = "t-SNE 2") +
+  theme_minimal()
+```
+
+```{r}
+
+# Calculate silhouette scores on the entire clustered data
+sil_scores_state_recluster <- silhouette(tsne_kmeans_state$cluster, dist(tsne_data_state))
+
+# Convert silhouette output to a dataframe for the reclustered data
+sil_data_state_recluster <- data.frame(
+  cluster = factor(sil_scores_state_recluster[, 'cluster']),
+  silhouette_width = sil_scores_state_recluster[, 'sil_width']
+)
+
+# Calculate average silhouette score per cluster for reclustered data
+sil_summary_state_recluster <- sil_data_state_recluster %>%
+  dplyr::group_by(cluster) %>%
+  dplyr::summarise(
+    average_silhouette = mean(silhouette_width),
+    .groups = 'drop'
+  ) %>%
+  dplyr::arrange(desc(average_silhouette))  # Sorting by average silhouette to identify best and worst performing clusters
+
+# Calculate the overall average silhouette score across all clusters
+avg_silhouette_state <- mean(sil_data_state_recluster$silhouette_width)
+
+# Print the summary of reclustered data
+print(sil_summary_state_recluster)
+print(paste("Overall Average Silhouette Score: ", avg_silhouette_state))
+
+# Plot using ggplot2 for reclustered data
+ggplot(sil_data_state_recluster, aes(x = silhouette_width, fill = cluster)) +
+  geom_histogram(binwidth = 0.05, color = "black", alpha = 0.7) +
+  facet_wrap(~ cluster, scales = "free_x") +
+  theme_minimal() +
+  labs(title = "Silhouette Width Distribution by Cluster for Reclustered Data",
+       x = "Silhouette Width",
+       y = "Frequency") +
+  theme(legend.position = "none")
+
+```
+
+
+```{r}
+# Ensure that the number of rows in both the dataset and the cluster labels match
+if (nrow(unique_specific_division_data) == length(tsne_kmeans_state$cluster)) {
+  unique_specific_division_data$recluster <- as.factor(tsne_kmeans_state$cluster)
+} else {
+  stop("The number of cluster labels does not match the number of rows in the dataset.")
+}
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(modeest)  # For calculating mode
+
+# Cluster Profiling: Calculate mean, median, and mode for each cluster
+cluster_profile <- unique_specific_division_data %>%
+  group_by(recluster) %>%
+  summarise(
+    across(.cols = where(is.numeric),
+           .fns = list(
+             mean = ~ mean(., na.rm = TRUE),
+             median = ~ median(., na.rm = TRUE),
+             mode = ~ if (all(is.na(.))) NA else mfv(na.omit(.))[1]
+           ),
+           .names = "{.col}_{.fn}"
+    ),
+    .groups = 'drop'  # Ensure the resulting tibble is ungrouped
+  )
+  
+# Print the calculated mean, median, and mode for each cluster
+print(cluster_profile)
+
+
+```
+
+```{r}
+library(randomForest)
+set.seed(2024)  # for reproducible results
+
+# Prepare data for Random Forest model
+features <- select(unique_specific_division_data, where(is.numeric))
+target <- unique_specific_division_data$recluster  # the target variable
+
+# Fit the Random Forest model
+rf_model <- randomForest(x = features, y = target, ntree = 500, mtry = sqrt(ncol(features)), importance = TRUE)
+
+# Extract feature importance
+importance_df <- as.data.frame(importance(rf_model))
+importance_df$Feature <- rownames(importance_df)
+
+# Plotting the feature importance
+ggplot(importance_df, aes(x = reorder(Feature, MeanDecreaseAccuracy), y = MeanDecreaseAccuracy)) +
+  geom_col(fill = "dodgerblue") +
+  coord_flip() +  # Flip coordinates for horizontal layout
+  labs(title = "Feature Importance", x = "Features", y = "Mean Decrease in Accuracy") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```

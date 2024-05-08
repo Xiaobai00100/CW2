@@ -1,0 +1,639 @@
+---
+title: "4-cluster_analysis"
+output: html_document
+date: "2024-04-26"
+---
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(cluster)  # for silhouette analysis
+library(Rtsne)    # for t-SNE dimensionality reduction
+library(randomForest)  # for feature importance
+library(corrplot)  # for correlation plots
+```
+
+PCA
+Silhouette Method to Choose the Right Number of Clusters
+perform the cluster analysis (k-means)
+
+Analyze the clusters to interpret what each cluster represents. This involves looking at the mean or median values of features within each cluster and understanding how they differ from one cluster to another.
+Visualize the results to better understand the distribution of clusters. You can use methods like Principal Component Analysis (PCA) to reduce dimensionality for visualization.
+
+Compile your findings into a report. Discuss the characteristics of each cluster, what they represent in terms of coverage and cost-sharing, and any implications or actionable insights that stakeholders might find useful.
+
+```{r}
+# Set the working directory, remember to set your own working directory when running the project
+setwd("/Users/xb/Desktop/Imperial College/Data Science/Coursework/CW2/01714481-math70076-assessment-2")
+# Load the data
+benefits_cost_sharing_transformed <- readRDS("benefits_cost_sharing_transformed.rds")
+benefits_norm <- readRDS("benefits_norm.rds")
+```
+
+```{r}
+head(benefits_norm)
+```
+
+
+
+All data, not traceable
+```{r}
+library(dbscan)
+
+
+# Remove the 'benefit_name' column
+benefits_features <- benefits_norm[, -which(names(benefits_norm) == "benefit_name")]
+
+# Set 'grouped_benefit_numeric' as the target variable
+target_variable <- benefits_norm$grouped_benefit_numeric
+
+# Perform OPTICS clustering
+optics_result <- optics(as.matrix(benefits_features))
+
+# Extract cluster assignments
+clusters <- optics_result$cluster
+
+# Summary of cluster assignments
+table(clusters)
+
+# Plot the OPTICS reachability plot
+plot(optics_result, main = "OPTICS Reachability Plot")
+
+# Plot the OPTICS clustering result
+plot(optics_result, main = "OPTICS Clustering Result", whichplot = 2, col = clusters)
+```
+
+
+All data, traceable
+```{r}
+library(pbapply)
+
+# Remove the 'benefit_name' column
+benefits_features <- benefits_norm[, -which(names(benefits_norm) == "benefit_name")]
+
+# Set 'grouped_benefit_numeric' as the target variable
+target_variable <- benefits_norm$grouped_benefit_numeric
+
+# Function to perform OPTICS clustering with progress bar
+optics_with_progress <- function(data) {
+  pbapply::pblapply(1:nrow(data), function(i) {
+    optics(as.matrix(data[i, ]))
+  }, task.name = "Clustering Progress", progress = "text")
+}
+
+# Perform OPTICS clustering
+optics_results <- optics_with_progress(benefits_features)
+
+# Extract cluster assignments
+clusters <- sapply(optics_results, function(result) result$cluster)
+
+# Summary of cluster assignments
+table(unlist(clusters))
+
+# Plot the OPTICS reachability plot
+plot(optics_results[[1]], main = "OPTICS Reachability Plot")
+
+# Plot the OPTICS clustering result
+plot(optics_results[[1]], main = "OPTICS Clustering Result", whichplot = 2, col = clusters[[1]])
+```
+
+
+
+```{r}
+library(dbscan)
+
+# Set the seed for reproducibility
+set.seed(2024)
+
+# Sample 1% of the data
+sample_size <- ceiling(0.01 * nrow(benefits_norm))
+sample_indices <- sample(1:nrow(benefits_norm), size = sample_size, replace = FALSE)
+sample_data <- benefits_norm[sample_indices, ]
+
+# Remove the 'benefit_name' column
+benefits_features <- sample_data[, -which(names(sample_data) == "benefit_name")]
+
+# Set 'grouped_benefit_numeric' as the target variable
+target_variable <- sample_data$grouped_benefit_numeric
+
+# Perform OPTICS clustering
+optics_result <- optics(as.matrix(benefits_features))
+
+# Extract cluster assignments
+clusters <- optics_result$cluster
+
+# Summary of cluster assignments
+table(clusters)
+
+# Plot the OPTICS reachability plot
+plot(optics_result, main = "OPTICS Reachability Plot")
+
+# Plot the OPTICS clustering result
+plot(optics_result, main = "OPTICS Clustering Result", col = clusters)
+
+```
+
+
+elbow method
+```{r}
+# Load required library
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(purrr) # Add this line
+
+# Assuming benefits_norm is your dataframe
+
+# Exclude "benefit_name" column
+benefits_features <- select(benefits_norm, -benefit_name)
+
+# Set "grouped_benefit_numeric" as the target variable
+target_variable <- benefits_norm$grouped_benefit_numeric
+
+# Scale the features
+scaled_features <- scale(benefits_features)
+
+# Function to calculate total within-cluster sum of squares
+wss <- function(k) {
+  kmeans(scaled_features, k, nstart = 10)$tot.withinss
+}
+
+# Calculate within-cluster sum of squares for k = 1 to 10
+k.values <- 1:10
+wss_values <- map_dbl(k.values, wss)
+
+# Plot the elbow plot
+elbow_plot <- ggplot(data.frame(k = k.values, wss = wss_values), aes(x = k, y = wss)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Number of clusters (k)", y = "Total within-cluster sum of squares") +
+  ggtitle("Elbow Method") +
+  theme_minimal()
+
+print(elbow_plot)
+
+# You can visually inspect the plot and determine the optimal number of clusters
+
+```
+
+
+elbow method sample data
+```{r}
+# Load required library
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(purrr) 
+
+# Assuming benefits_norm is your dataframe
+
+# Randomly sample 1% of the data
+set.seed(2024) # for reproducibility
+sampled_data <- sample_frac(benefits_norm, 0.01)
+
+# Exclude "benefit_name" column
+benefits_features <- select(sampled_data, -benefit_name)
+
+# Set "grouped_benefit_numeric" as the target variable
+target_variable <- sampled_data$grouped_benefit_numeric
+
+# Scale the features
+scaled_features <- scale(benefits_features)
+
+# Function to calculate total within-cluster sum of squares
+wss <- function(k) {
+  kmeans(scaled_features, k, nstart = 10)$tot.withinss
+}
+
+# Calculate within-cluster sum of squares for k = 1 to 10
+k.values <- 1:40
+wss_values <- map_dbl(k.values, wss)
+
+# Plot the elbow plot
+elbow_plot <- ggplot(data.frame(k = k.values, wss = wss_values), aes(x = k, y = wss)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Number of clusters (k)", y = "Total within-cluster sum of squares") +
+  ggtitle("Elbow Method") +
+  theme_minimal()
+
+print(elbow_plot)
+
+```
+
+
+Perform k-means clustering using the sampled data
+```{r}
+# Number of clusters (you can change this according to the elbow method or your requirements)
+k <- 15
+
+# Perform k-means clustering
+kmeans_result <- kmeans(scaled_features, 
+                        centers = k,              # Number of clusters
+                        nstart = 10,             # Number of random starts
+                        iter.max = 100,          # Maximum number of iterations
+                        algorithm = "Hartigan-Wong" # Algorithm for center initialization
+)
+
+# Add cluster labels to the sampled data
+sampled_data$cluster <- as.factor(kmeans_result$cluster)
+
+# Print the counts of data points in each cluster
+print(table(sampled_data$cluster))
+
+# Plot clusters based on the first two principal components (assuming features are high-dimensional)
+# If you have fewer features, you can plot based on those features
+pca <- prcomp(scaled_features, scale. = TRUE)
+pca_data <- as.data.frame(predict(pca, scaled_features))
+
+# Plot clusters
+cluster_plot <- ggplot(pca_data, aes(x = PC1, y = PC2, color = sampled_data$cluster)) +
+  geom_point() +
+  labs(x = "Principal Component 1", y = "Principal Component 2", color = "Cluster") +
+  ggtitle("K-means Clustering") +
+  theme_minimal()
+
+print(cluster_plot)
+
+```
+
+
+K-mean with full data
+```{r}
+# Load required libraries
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+# Exclude "benefit_name" column
+benefits_features <- select(benefits_norm, -benefit_name)
+
+# Set "grouped_benefit_numeric" as the target variable
+target_variable <- benefits_norm$grouped_benefit_numeric
+
+# Scale the features
+scaled_features <- scale(benefits_features)
+
+# Set k (number of clusters)
+k <- 15
+
+# Set the number of random starts
+nstart <- 30
+
+# Set the maximum number of iterations
+iter.max <- 100
+
+# Perform k-means clustering
+kmeans_result <- kmeans(scaled_features, 
+                        centers = k,         # Number of clusters
+                        nstart = nstart,    # Number of random starts
+                        iter.max = iter.max # Maximum number of iterations
+)
+
+# Add cluster labels to the original data
+benefits_norm$cluster <- as.factor(kmeans_result$cluster)
+
+# Print the counts of data points in each cluster
+print(table(benefits_norm$cluster))
+
+# Plot clusters based on the first two principal components (assuming features are high-dimensional)
+# If you have fewer features, you can plot based on those features
+pca <- prcomp(scaled_features, scale. = TRUE)
+pca_data <- as.data.frame(predict(pca, scaled_features))
+
+# Plot clusters
+cluster_plot <- ggplot(pca_data, aes(x = PC1, y = PC2, color = benefits_norm$cluster)) +
+  geom_point() +
+  labs(x = "Principal Component 1", y = "Principal Component 2", color = "Cluster") +
+  ggtitle("K-means Clustering") +
+  theme_minimal()
+
+print(cluster_plot)
+
+```
+
+
+```{r}
+# Step 1: Cluster Validation
+# Silhouette analysis
+# Sampling equally from each cluster
+sampled_indices <- lapply(unique(kmeans_result$cluster), function(cl) {
+  sample(which(kmeans_result$cluster == cl), 2000)  # sample 100 points from each cluster
+})
+
+sampled_indices <- unlist(sampled_indices)
+sampled_sil_scores <- silhouette(kmeans_result$cluster[sampled_indices], dist(scaled_features[sampled_indices, ]))
+
+# Convert silhouette output to a dataframe
+sil_data <- silhouette(kmeans_result$cluster[sampled_indices], dist(scaled_features[sampled_indices, ]))
+sil_df <- data.frame(cluster = factor(sil_data[, 'cluster']),
+                     silhouette_width = sil_data[, 'sil_width'])
+
+# Calculate average silhouette score per cluster
+sil_aver <- sil_df %>%
+  group_by(cluster) %>%
+  summarise(
+    average_silhouette = mean(silhouette_width)
+  ) %>%
+  arrange(desc(average_silhouette))  # Sorting by average silhouette to identify best and worst performing clusters
+
+# Print the summary
+print(sil_aver)
+
+# Plot using ggplot2
+library(ggplot2)
+ggplot(sil_df, aes(x = silhouette_width, fill = cluster)) +
+  geom_histogram(binwidth = 0.05, color = "black", alpha = 0.7) +
+  facet_wrap(~ cluster, scales = "free_x") +
+  theme_minimal() +
+  labs(title = "Silhouette Width Distribution by Cluster",
+       x = "Silhouette Width",
+       y = "Frequency") +
+  theme(legend.position = "none")
+
+
+```
+
+
+
+```{r}
+# Step 2: Re-clustering
+# 1: Sampling data
+set.seed(2024)  # For reproducibility
+sample_recluster <- scaled_features[sample(nrow(scaled_features), 40000), ]
+
+# 2: Apply t-SNE
+tsne_results <- Rtsne(sample_recluster, dims = 2, perplexity = 90, check_duplicates = FALSE, verbose = TRUE, max_iter = 500)
+
+# Convert to dataframe for plotting and clustering
+tsne_data <- data.frame(X = tsne_results$Y[,1], Y = tsne_results$Y[,2])
+
+# 3: Re-cluster using k-means on the t-SNE output
+tsne_kmeans <- kmeans(tsne_data, centers = 15, nstart = 20)
+
+# Add cluster labels to t-SNE data
+tsne_data$cluster <- as.factor(tsne_kmeans$cluster)
+
+# 4: Plotting
+ggplot(tsne_data, aes(x = X, y = Y, color = cluster)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Cluster Visualization after t-SNE", x = "t-SNE 1", y = "t-SNE 2") +
+  theme_minimal()
+
+```
+
+```{r}
+# Silhouette Score on Reclustered Data
+# Sampling equally from each cluster of reclustered data
+sampled_indices_recluster <- lapply(unique(tsne_kmeans$cluster), function(cl) {
+  sample(which(tsne_kmeans$cluster == cl), 2000)  # Sample 2000 points from each cluster
+})
+
+sampled_indices_recluster <- unlist(sampled_indices_recluster)
+
+# Calculate silhouette scores on sampled reclustered data
+sampled_sil_scores_recluster <- silhouette(tsne_kmeans$cluster[sampled_indices_recluster], dist(tsne_data[sampled_indices_recluster, ]))
+
+# Convert silhouette output to a dataframe for the reclustered data
+sil_data_recluster <- data.frame(
+  cluster = factor(sampled_sil_scores_recluster[, 'cluster']),
+  silhouette_width = sampled_sil_scores_recluster[, 'sil_width']
+)
+
+# Calculate average silhouette score per cluster for reclustered data
+sil_summary_recluster <- sil_data_recluster %>%
+  group_by(cluster) %>%
+  summarise(
+    average_silhouette = mean(silhouette_width)
+  ) %>%
+  arrange(desc(average_silhouette))  # Sorting by average silhouette to identify best and worst performing clusters
+
+# Calculate overall average silhouette score across all clusters
+overall_avg_silhouette <- mean(sil_data_recluster$silhouette_width)
+
+# Print the summary of reclustered data
+print(sil_summary_recluster)
+print(paste("Overall Average Silhouette Score: ", overall_avg_silhouette))
+
+# Plot using ggplot2 for reclustered data
+ggplot(sil_data_recluster, aes(x = silhouette_width, fill = cluster)) +
+  geom_histogram(binwidth = 0.05, color = "black", alpha = 0.7) +
+  facet_wrap(~ cluster, scales = "free_x") +
+  theme_minimal() +
+  labs(title = "Silhouette Width Distribution by Cluster for Reclustered Data",
+       x = "Silhouette Width",
+       y = "Frequency") +
+  theme(legend.position = "none")
+
+
+
+```
+
+```{r}
+library(dbscan)
+set.seed(2024)  # For reproducibility
+
+# Apply DBSCAN, eps and minPts need to be chosen based on domain knowledge or parameter tuning
+db <- dbscan(tsne_data[, c("X", "Y")], eps = 0.5, minPts = 10)
+
+# Visualize the clustering result
+ggplot(tsne_data, aes(x = X, y = Y, color = as.factor(db$cluster))) +
+  geom_point(alpha = 0.6) +
+  labs(title = "DBSCAN Clustering on t-SNE Data", x = "t-SNE 1", y = "t-SNE 2") +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+# Adjust DBSCAN parameters
+eps_adjusted <- 1.3  # Adjust based on the scale of your t-SNE output
+minPts_adjusted <- 70  # Increase minPts to consider larger core points
+
+# Apply DBSCAN with adjusted parameters
+db_adjusted <- dbscan(tsne_data[, c("X", "Y")], eps = eps_adjusted, minPts = minPts_adjusted)
+
+# Visualize the adjusted clustering result
+ggplot(tsne_data, aes(x = X, y = Y, color = as.factor(db_adjusted$cluster))) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Adjusted DBSCAN Clustering on t-SNE Data", x = "t-SNE 1", y = "t-SNE 2") +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+# Step 3: Cluster Profiling and Characterization 
+# Apply clustering (assuming tsne_kmeans$cluster contains cluster labels)
+benefits_norm$recluster <- NA  # Initialize the cluster assignment column
+benefits_norm$recluster[sample_indices] <- as.factor(tsne_kmeans$cluster)
+
+# Filter out data with NA in recluster column
+filtered_benefits_norm <- filter(benefits_norm, !is.na(recluster))
+
+# Calculate and print mean or median for each cluster for profiling
+library(dplyr)
+recluster_summary <- filtered_benefits_norm %>%
+  group_by(recluster) %>%
+  summarise(across(where(is.numeric), list(mean = mean, median = median), na.rm = TRUE))
+print(recluster_summary)
+
+```
+
+
+
+```{r}
+# Step 4: Feature Importance 
+library(randomForest)
+library(dplyr)
+library(ggplot2)
+
+# Correctly ensure the dataset does not include the 'recluster' column as a feature
+# Select only numeric columns and exclude 'recluster'
+features_rf <- select(filtered_benefits_norm, where(is.numeric))
+features_rf <- select(features_rf, -recluster)
+
+# Fit the Random Forest model using 'recluster' as the target variable
+rf_model <- randomForest(x = features_rf, 
+                         y = as.factor(filtered_benefits_norm$recluster), 
+                         importance = TRUE)
+
+# Extract feature importance
+importance_df <- as.data.frame(importance(rf_model))
+importance_df$Feature <- rownames(importance_df)
+
+# Plotting the feature importance
+ggplot(importance_df, aes(x = reorder(Feature, MeanDecreaseAccuracy), y = MeanDecreaseAccuracy)) +
+  geom_col(fill = "dodgerblue") +
+  coord_flip() +  # Flip coordinates for horizontal layout
+  labs(title = "Feature Importance", x = "Features", y = "Mean Decrease in Accuracy") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+
+
+
+```{r}
+inspected_data <- benefits_norm %>%
+  filter(benefit_name == "Orthodontia - Child") %>%
+  head(10)  # Get the first few rows of the filtered dataset
+
+# Print the filtered data
+print(inspected_data)
+```
+
+
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(tidyr)
+
+# Step 1: Filter the dataset
+orthodontia_data <- benefits_norm %>%
+  filter(benefit_name == "Orthodontia - Child")
+
+# Step 2: Group by all columns and summarize
+value_counts <- orthodontia_data %>%
+  group_by(across(everything())) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  arrange(desc(count))
+
+# Step 3: Total number of rows and number of unique sets
+total_rows <- nrow(orthodontia_data)
+unique_sets <- nrow(value_counts)
+
+# Print results
+cat("Total number of rows: ", total_rows, "\n")
+cat("Number of unique sets of values: ", unique_sets, "\n")
+
+# Check if there are enough rows to display most common, second and third most common
+if (nrow(value_counts) > 0) {
+  cat("Most common set of values appears: ", value_counts$count[1], " times\n")
+  print(value_counts[1, ])
+}
+
+if (nrow(value_counts) > 1) {
+  cat("Second most common set of values appears: ", value_counts$count[2], " times\n")
+  print(value_counts[2, ])
+}
+
+if (nrow(value_counts) > 2) {
+  cat("Third most common set of values appears: ", value_counts$count[3], " times\n")
+  print(value_counts[3, ])
+}
+
+
+```
+
+
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(tidyr)
+
+# Step 1: Filter the dataset for the specific division value
+specific_division_data <- benefits_norm %>%
+  filter(division == unique(benefits_norm$division)[1,])
+
+# Step 2: Group by all columns and summarize to find unique combinations
+value_counts <- specific_division_data %>%
+  group_by(across(everything())) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  arrange(desc(count))
+
+# Step 3: Total number of rows and number of unique sets
+total_rows <- nrow(specific_division_data)
+unique_sets <- nrow(value_counts)
+
+# Print results
+cat("Total number of rows in division 1.896873: ", total_rows, "\n")
+cat("Number of unique sets of values in division 1.896873: ", unique_sets, "\n")
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
