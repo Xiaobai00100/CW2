@@ -1,0 +1,2 @@
+In this file, I will present the guideline for using the visualisation function in 6-visualisation.Rmd. I will also giev some suggestions on the scenarios to use these functions, and give an example with interpretations from the output plot. We have 5 functions in total, which are: `plot_average_by_cluster`, `plot_boxplot_cluster`, `plot_pie_chart`, `plot_proportion_by_cluster`, and `plot_heatmap_means`.
+
