@@ -15,6 +15,7 @@ library(corrplot)  # for correlation plots
 library(modeest)
 ```
 
+In this script, we followed the same methodologies adopted in 4-cluster_analysis.Rmd. But in this script, we will focus on one specific division, to look at the benefit clustering within one region.
 ```{r}
 # Set the working directory, remember to set your own working directory when running the project
 setwd("/Users/xb/Desktop/Imperial College/Data Science/Coursework/CW2/01714481-math70076-assessment-2")

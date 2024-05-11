@@ -5,7 +5,7 @@
 setwd("/Users/xb/Desktop/Imperial College/Data Science/Coursework/CW2/01714481-math70076-assessment-2")
 
 # Install necessary packages if they are not already installed
-required_packages <- c("tidyverse", "readr", "janitor", "lubridate", "ggplot2", "tidyr", "dplyr", "purrr", "cluster", "modeest", "Rtsne", "randomForest", "corrplot")
+required_packages <- c("tidyverse", "readr", "janitor", "lubridate", "ggplot2", "tidyr", "dplyr", "purrr", "cluster", "modeest", "Rtsne", "randomForest", "corrplot", "modeest")
 
 new_packages <- required_packages[!(required_packages %in% installed.packages()[,"Package"])]
 if(length(new_packages)) install.packages(new_packages)
